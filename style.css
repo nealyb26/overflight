@@ -1,0 +1,34 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body,
+html {
+  overflow-x: hidden;
+  font-family: "Poppins", sans-serif;
+  color: "white"
+}
+
+.webgl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.container {
+  color: white;
+  z-index: 2;
+  text-align: left;
+  position: relative;
+  padding: 2rem 1rem;
+}
+.container h1 {
+  padding-bottom: 20px; /*padding added to title*/
+  font-size: 36px; /*size of title*/
+}
+.container p {
+  font-size: 18px; /*size of normal text*/
+}

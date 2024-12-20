@@ -1,0 +1,6 @@
+requests
+flask
+flask-cors
+pandas
+FlightRadarAPI
+gunicorn==19.7.1
