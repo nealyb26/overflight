@@ -5,12 +5,21 @@ import {CSS2DRenderer, CSS2DObject} from 'three/examples/jsm/renderers/CSS2DRend
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls"
 
 //scene
-const scene = new THREE.Scene()
+const scene = new THREE.Scene();
+// MAP API KEY
+// const apiKey = process.env.VITE_API_KEY;
+// const apiKey = import.meta.env.VITE_API_KEY;
+const apiKey = "INSERT VIRTUAL EARTH API KEY HERE";
+// API Base URL dynamically set based on current environment
+const API_BASE_URL = "https://overflight-container-681855981049.us-central1.run.app"
+  //: 'http://127.0.0.1:5000' // Local development
+  //: 'https://overflight-container-681855981049.us-central1.run.app'; // Cloud Run URL
+
 //plane model
 let model = null;
 //user longitude and latitude
-let lat0 = 36.12063617887522
-let long0 = -86.6819769217225
+let lat0 = 34.1184
+let long0 = -118.3004
 
 //constants for distance conversion
 const EARTH_CIRCUMFERENCE_KM = 40075.0;
@@ -106,10 +115,9 @@ function getStaticImageURL(apiKey, centerPoint, zoomLevel, mapSize) {
 	return `${baseUrl}/${center}/${zoom}?mapSize=${size}&key=${apiKey}`;
 }
 
-const apiKey = 'AstsRYOK9ExBIF1kaNV6e76MOVV-GjexUYU3KwdSDOhZDRyhx3uj-D-HRxvO6gqp';
-// const imageUrl = getStaticImageURL(apiKey, { lat: lat0, lng: long0}, 10, { width: 512, height: 512 });
 getUserLocation((lat0, long0) => {
 	const imageUrl = getStaticImageURL(apiKey, {lat: lat0, lng: long0}, 11, {width: 512, height: 512})
+	console.log(`Map URL Imported: ${apiKey}`)
 
 	//creating ground flat object
 	// 2 x 2 area
@@ -147,7 +155,7 @@ loader.load('airplane.glb', function (glb) {
 
 
 function sendLocationToServer(latitude, longitude) {
-    fetch('http://127.0.0.1:5000/api/location', {
+    fetch(API_BASE_URL + '/api/location', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -207,6 +215,7 @@ function addPlanes(planes, scene) {
 		let planeP = document.createElement('p');
 		let planeLabel = new CSS2DObject(planeP);
 		planeP.textContent = plane.callsign;
+		planeP.style.color = 'red';
 		
 		const clone = model.clone();
 		clone.add(planeLabel);
@@ -266,7 +275,7 @@ function processData(responseList) {
 
 //fetch nearby airplanes from Flask Backend
 function fetchPlanes() {
-	fetch('http://127.0.0.1:5000/response')
+	fetch(API_BASE_URL + '/response')
 	.then(response => {
 		if (!response.ok) {
 			throw new Error('Network Response Wasn\'t ok ' + response.statusText );
@@ -281,7 +290,7 @@ function fetchPlanes() {
 }
 
 fetchPlanes()
-setInterval(fetchPlanes, 15000);
+setInterval(fetchPlanes, 12000);
 
 
 //resizing canvas to the size of the window

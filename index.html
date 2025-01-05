@@ -12,11 +12,23 @@
   <body>
     <canvas class = "webgl"></canvas>
     <div class="container">
-      <h1>Overflight</h1>
-      <p>What's up? No literally.<br> Take a look at the planes<br> that are 
-        in the sky above<br> your location.
-      </p>
+      <h1 id="title" class="title">Overflight</h1>
+      <div id="subtitle" class="subtitle">
+        <p>What's up? No literally.<br> Take a look at the planes<br> that are 
+          in the sky above<br> your location.
+        </p>
+      </div>
     </div>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const title = document.getElementById("title");
+        const subtitle = document.getElementById("subtitle");
+
+        title.addEventListener("click", () => {
+          subtitle.classList.toggle("open"); // Toggle the open class
+        });
+      });
+    </script>
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script type="module" src="/main.js"></script>
   </body>

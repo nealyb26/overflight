@@ -19,12 +19,46 @@ html {
 }
 
 .container {
-  color: white;
+  color: #ffde21;
   z-index: 2;
   text-align: left;
   position: relative;
   padding: 2rem 1rem;
 }
+
+/*Add Frosting Effect to Container Text*/
+.container {
+  display: inline-block; /* Shrinks the container to fit the content */
+  position: relative;
+  background: rgba(255, 255, 255, 0); /* Fully transparent background */
+  backdrop-filter: blur(2px); /* Applies blur without adding visible background color */
+  padding: 10px; /* Adds padding around the text */
+  border-radius: 10px; /* Optional: Rounded corners for a softer look */
+  margin: 0 auto; /* Centers the container horizontally if needed */
+}
+
+.title {
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.title:hover {
+  color:white;
+}
+
+.subtitle {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s ease, opacity 0.5s ease;
+  opacity: 0;
+}
+
+.subtitle.open {
+  max-height: 150px;
+  opacity: 1;
+}
+
+
 .container h1 {
   padding-bottom: 20px; /*padding added to title*/
   font-size: 36px; /*size of title*/

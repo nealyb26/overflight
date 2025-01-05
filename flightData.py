@@ -47,7 +47,7 @@ def selectDataFromDetails(details):
 def main():
     
     #user_long, user_lat = getManualBounds()
-    user_long, user_lat = -86.6819769217225, 36.12063617887522
+    user_lat, user_long = 34.1184, -118.3004
     boolInput = True
 
     while(boolInput):
@@ -56,7 +56,7 @@ def main():
         for flight in flights:
             details = getFlightDetails(flight)
             print(selectDataFromDetails(details))
-            #print(details)
+            print(f"Flight Detail: {details}")
             print("")
         boolInput = queryAgain()
 
