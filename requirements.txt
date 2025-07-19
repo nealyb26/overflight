@@ -2,5 +2,6 @@ requests
 flask
 flask-cors
 pandas
+beautifulsoup4
 FlightRadarAPI
 gunicorn==19.7.1

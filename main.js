@@ -7,9 +7,9 @@ import {OrbitControls} from "three/examples/jsm/controls/OrbitControls"
 //scene
 const scene = new THREE.Scene();
 // MAP API KEY
-// const apiKey = process.env.VITE_API_KEY;
 // const apiKey = import.meta.env.VITE_API_KEY;
-const apiKey = "INSERT VIRTUAL EARTH API KEY HERE";
+const apiKey = import.meta.env.VITE_GEOAPIFY_KEY;
+
 // API Base URL dynamically set based on current environment
 const API_BASE_URL = "https://overflight-container-681855981049.us-central1.run.app"
   //: 'http://127.0.0.1:5000' // Local development
@@ -32,11 +32,10 @@ const SCALE_FACTOR = 20;
 //creating a wire box
 //2 x 2 x 2 wire mesh box
 var geometry = new THREE.BoxGeometry( 2, 2, 2)
-var material = new THREE.MeshNormalMaterial( {wireframe: true, transparent: true
-})
-var mesh = new THREE.Mesh ( geometry, material )
-mesh.position.y += 1;
-var helper = new THREE.BoxHelper( mesh )
+var material = new THREE.MeshNormalMaterial( {wireframe: true, transparent: true})
+var cubeMesh = new THREE.Mesh ( geometry, material )
+cubeMesh.position.y += 1;
+var helper = new THREE.BoxHelper( cubeMesh )
 helper.update();
 scene.add( helper )
 
@@ -61,9 +60,9 @@ scene.add( pointLight );
 //FOV, Aspect Ratio are parameters
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000)
 //camera.position.z = 8 //moving camera back a few units
-camera.position.set(4, 6, 6);
+camera.position.set(4, 6, 6); // x, y, z
 // Make the camera look at the object
-camera.lookAt(helper.position);
+camera.lookAt(cubeMesh);
 scene.add( camera )
 
 // renderer
@@ -87,6 +86,9 @@ const controls = new OrbitControls(camera, canvas)
 controls.enablePan = false //region always centered
 //controls.enableZoom = false //no scroll to zoom
 
+controls.target.copy(cubeMesh.position).add(new THREE.Vector3(0, -0.2, 0));
+controls.update();
+
 function getUserLocation(callback) {
 	if ("geolocation" in navigator) {
 		navigator.geolocation.getCurrentPosition(position => {
@@ -106,22 +108,25 @@ function getUserLocation(callback) {
 	}
 }
 
-function getStaticImageURL(apiKey, centerPoint, zoomLevel, mapSize) {
-	const baseUrl = "https://dev.virtualearth.net/REST/v1/Imagery/Map/Road";
-	const center = `${centerPoint.lat},${centerPoint.lng}`;
-	const size = `${mapSize.width},${mapSize.height}`;
-	const zoom = zoomLevel;
+function getStaticImageURL(centerPoint, zoomLevel, mapSize) {
+	const { lat, lng} = centerPoint;
+	const { width, height} = mapSize;
 
-	return `${baseUrl}/${center}/${zoom}?mapSize=${size}&key=${apiKey}`;
+	// osm-carto is the default OSM style
+	return `https://maps.geoapify.com/v1/staticmap`
+		+ `?style=osm-bright`
+		+ `&width=${width}&height=${height}`
+		+ `&center=lonlat:${lng},${lat}`
+		+ `&zoom=${zoomLevel}`
+		+ `&apiKey=${apiKey}`;
 }
 
 getUserLocation((lat0, long0) => {
-	const imageUrl = getStaticImageURL(apiKey, {lat: lat0, lng: long0}, 11, {width: 512, height: 512})
-	console.log(`Map URL Imported: ${apiKey}`)
+	const imageUrl = getStaticImageURL({lat: lat0, lng: long0}, 11, {width: 512, height: 512})
 
-	//creating ground flat object
-	// 2 x 2 area
+	//creating ground flat object - 2 x 2 area
 	const Maploader = new THREE.TextureLoader();
+	Maploader.setCrossOrigin('anonymous');
 	Maploader.load(imageUrl, function(texture) {
 		const groundGeometry = new THREE.PlaneGeometry(2, 2, 32, 32)
 		groundGeometry.rotateX(Math.PI / 2) //rotating plane 90 deg
