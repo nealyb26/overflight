@@ -18,14 +18,41 @@
           above your location.<br>
         </p>
       </div>
+      <div class="location-tools">
+        <label class="location-tools-label" for="test-lat">Test location</label>
+        <div class="location-tools-row">
+          <input id="test-lat" type="text" inputmode="decimal" placeholder="Latitude" aria-label="Test latitude">
+          <input id="test-lon" type="text" inputmode="decimal" placeholder="Longitude" aria-label="Test longitude">
+          <button id="apply-test-location" type="button">Apply</button>
+        </div>
+        <button id="use-current-location" type="button" class="secondary">Use my location</button>
+      </div>
+    </div>
+    <div id="flight-info-panel" class="flight-info-panel hidden">
+      <div class="flight-info-title">Flight Details</div>
+      <div id="flight-info-empty" class="flight-info-empty">Click an aircraft to see details.</div>
+      <div id="flight-info-grid" class="flight-info-grid hidden">
+        <div><span class="label">Callsign:</span> <span id="flight-callsign">-</span></div>
+        <div><span class="label">Aircraft:</span> <span id="flight-aircraft">-</span></div>
+        <div><span class="label">Origin:</span> <span id="flight-origin">-</span></div>
+        <div><span class="label">Destination:</span> <span id="flight-destination">-</span></div>
+        <div><span class="label">Speed:</span> <span id="flight-speed">-</span></div>
+        <div><span class="label">Altitude:</span> <span id="flight-altitude">-</span></div>
+        <div><span class="label">Status:</span> <span id="flight-status">-</span></div>
+        <div><span class="label">Delay:</span> <span id="flight-delay">-</span></div>
+      </div>
     </div>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         const title = document.getElementById("title");
         const subtitle = document.getElementById("subtitle");
+        const locationTools = document.querySelector(".location-tools");
 
         title.addEventListener("click", () => {
           subtitle.classList.toggle("open"); // Toggle the open class
+          if (locationTools) {
+            locationTools.classList.toggle("open");
+          }
         });
       });
     </script>

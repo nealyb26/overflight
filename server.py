@@ -20,7 +20,10 @@ def handle_location():
     Handle user location sent from the frontend.
     """
     global my_lat, my_long
-    data = request.json
+    data = request.json or {}
+    if 'latitude' not in data or 'longitude' not in data:
+        return jsonify({"error": "Missing latitude/longitude"}), 400
+
     my_lat = data['latitude']
     my_long = data['longitude']
 
@@ -34,13 +37,22 @@ def departures_handler():
     global my_long, my_lat
     try:
         user_long, user_lat = my_long, my_lat
+        if user_long is None or user_lat is None:
+            return {"response": []}
+
         flights = returnCloseByFlights(user_long, user_lat)
         responseList = []
 
         for flight in flights:
-            details = getFlightDetails(flight)
-            selectedData = selectDataFromDetails(details)
-            responseList.append(selectedData)
+            details = {}
+            try:
+                details = getFlightDetails(flight)
+            except Exception as e:
+                print(f"Skipping detail fetch for flight {getattr(flight, 'id', None)}: {e}")
+
+            selectedData = selectDataFromDetails(details, flight)
+            if selectedData.get("latitude") is not None and selectedData.get("longitude") is not None:
+                responseList.append(selectedData)
 
         return {"response": responseList}
     except Exception as e:

@@ -15,7 +15,7 @@ html {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  z-index: 0;
 }
 
 .container {
@@ -23,7 +23,7 @@ html {
   z-index: 2;
   text-align: left;
   position: relative;
-  padding: 2rem 1rem;
+  padding: 0.75rem;
 }
 
 /*Add Frosting Effect to Container Text*/
@@ -32,8 +32,8 @@ html {
   position: relative;
   background: rgba(255, 255, 255, 0); /* Fully transparent background */
   backdrop-filter: blur(2px); /* Applies blur without adding visible background color */
-  padding: 10px; /* Adds padding around the text */
-  border-radius: 10px; /* Optional: Rounded corners for a softer look */
+  padding: 6px 8px; /* Keep text close while preserving readability */
+  border-radius: 14px;
   margin: 0 auto; /* Centers the container horizontally if needed */
 }
 
@@ -58,11 +58,133 @@ html {
   opacity: 1;
 }
 
+.location-tools {
+  display: none;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 14px;
+  background: rgba(10, 10, 14, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  width: min(100%, 420px);
+}
+
+.location-tools.open {
+  display: block;
+}
+
+.location-tools-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: 'Rubik', sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.location-tools-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.location-tools input,
+.location-tools button {
+  height: 2.4rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  padding: 0 0.75rem;
+  font: inherit;
+  min-width: 0;
+}
+
+.location-tools input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.location-tools button {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.location-tools button.secondary {
+  margin-top: 0.5rem;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+}
+
 
 .container h1 {
-  padding-bottom: 20px; /*padding added to title*/
+  padding-bottom: 8px; /*padding added to title*/
   font-size: 36px; /*size of title*/
 }
 .container p {
   font-size: 18px; /*size of normal text*/
+}
+
+.flight-info-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(960px, calc(100% - 24px));
+  z-index: 3;
+  padding: 14px 16px;
+  border-radius: 14px;
+  color: #fefefe;
+  background: rgba(10, 20, 30, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.flight-info-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #ffde21;
+}
+
+.flight-info-empty {
+  opacity: 0.9;
+  font-size: 14px;
+}
+
+.flight-info-grid {
+  display: grid;
+  gap: 8px 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  font-size: 14px;
+}
+
+.flight-info-grid .label {
+  opacity: 0.8;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .flight-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .flight-info-panel {
+    bottom: 10px;
+    padding: 12px;
+  }
+
+  .flight-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .location-tools-row {
+    grid-template-columns: 1fr;
+  }
 }

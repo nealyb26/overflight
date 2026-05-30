@@ -20,6 +20,7 @@ let model = null;
 //user longitude and latitude
 let lat0 = 34.1184
 let long0 = -118.3004
+let groundMesh = null;
 
 //constants for distance conversion
 const EARTH_CIRCUMFERENCE_KM = 40075.0;
@@ -67,7 +68,8 @@ scene.add( camera )
 
 // renderer
 const canvas = document.querySelector('.webgl')
-const renderer = new THREE.WebGLRenderer({canvas})
+const renderer = new THREE.WebGLRenderer({canvas, antialias: true})
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
 renderer.render( scene, camera )
 
@@ -76,6 +78,7 @@ const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
 labelRenderer.domElement.style.position = 'absolute';
 labelRenderer.domElement.style.pointerEvents = 'none'; //preventing container from capturing mouse events
+labelRenderer.domElement.style.zIndex = '1';
 labelRenderer.domElement.style.top = '0px';
 labelRenderer.domElement.style.color = "white"
 labelRenderer.domElement.style.fontSize = "small"
@@ -89,6 +92,179 @@ controls.enablePan = false //region always centered
 controls.target.copy(cubeMesh.position).add(new THREE.Vector3(0, -0.2, 0));
 controls.update();
 
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let selectedPlaneKey = null;
+
+const TRAIL_MIN_DISTANCE = 0.015;
+const TRAIL_MAX_POINTS = 500;
+const TRAIL_SAMPLE_INTERVAL_MS = 200;
+const trailPointsByKey = new Map();
+let selectedTrailLine = null;
+let lastTrailSampleTime = 0;
+
+const infoEmptyEl = document.querySelector('#flight-info-empty');
+const infoGridEl = document.querySelector('#flight-info-grid');
+const infoPanelEl = document.querySelector('#flight-info-panel');
+const callsignEl = document.querySelector('#flight-callsign');
+const aircraftEl = document.querySelector('#flight-aircraft');
+const originEl = document.querySelector('#flight-origin');
+const destinationEl = document.querySelector('#flight-destination');
+const speedEl = document.querySelector('#flight-speed');
+const altitudeEl = document.querySelector('#flight-altitude');
+const statusEl = document.querySelector('#flight-status');
+const delayEl = document.querySelector('#flight-delay');
+const testLatEl = document.querySelector('#test-lat');
+const testLonEl = document.querySelector('#test-lon');
+const applyTestLocationBtn = document.querySelector('#apply-test-location');
+const useCurrentLocationBtn = document.querySelector('#use-current-location');
+
+function formatValue(value, suffix = '') {
+	if (value === null || value === undefined || value === '') return 'N/A';
+	return `${value}${suffix}`;
+}
+
+function formatAirport(name, iata) {
+	if (name && iata) return `${name} (${iata})`;
+	if (name) return name;
+	if (iata) return iata;
+	return 'N/A';
+}
+
+function setInfoPanel(plane) {
+	if (!plane) {
+		if (infoPanelEl) infoPanelEl.classList.add('hidden');
+		if (infoGridEl) infoGridEl.classList.add('hidden');
+		if (infoEmptyEl) infoEmptyEl.classList.remove('hidden');
+		return;
+	}
+
+	if (infoPanelEl) infoPanelEl.classList.remove('hidden');
+	if (infoEmptyEl) infoEmptyEl.classList.add('hidden');
+	if (infoGridEl) infoGridEl.classList.remove('hidden');
+
+	if (callsignEl) callsignEl.textContent = formatValue(plane.callsign);
+	if (aircraftEl) aircraftEl.textContent = formatValue(plane.aircraft_type);
+	if (originEl) originEl.textContent = formatAirport(plane.origin_airport, plane.origin_iata);
+	if (destinationEl) destinationEl.textContent = formatAirport(plane.destination_airport, plane.destination_iata);
+	if (speedEl) speedEl.textContent = formatValue(plane.speed, ' kt');
+	if (altitudeEl) altitudeEl.textContent = formatValue(plane.altitude, ' ft');
+	if (statusEl) statusEl.textContent = formatValue(plane.status_text);
+	if (delayEl) delayEl.textContent = formatValue(plane.delay_state);
+}
+
+function clearSelectedTrailLine() {
+	if (!selectedTrailLine) return;
+	scene.remove(selectedTrailLine);
+	if (selectedTrailLine.geometry) selectedTrailLine.geometry.dispose();
+	if (selectedTrailLine.material) selectedTrailLine.material.dispose();
+	selectedTrailLine = null;
+}
+
+function drawSelectedTrail(points) {
+	if (!points || points.length < 2) {
+		clearSelectedTrailLine();
+		return;
+	}
+
+	if (!selectedTrailLine) {
+		const geometry = new THREE.BufferGeometry().setFromPoints(points);
+		const material = new THREE.LineBasicMaterial({
+			color: 0xffde21,
+			transparent: true,
+			opacity: 0.85
+		});
+		selectedTrailLine = new THREE.Line(geometry, material);
+		scene.add(selectedTrailLine);
+		return;
+	}
+
+	selectedTrailLine.geometry.setFromPoints(points);
+	selectedTrailLine.geometry.computeBoundingSphere();
+}
+
+function seedAndRenderSelectedTrail() {
+	if (!selectedPlaneKey) {
+		clearSelectedTrailLine();
+		return;
+	}
+
+	const selected = planeObjs.find(obj => obj.key === selectedPlaneKey);
+	if (!selected || !selected.model) {
+		clearSelectedTrailLine();
+		return;
+	}
+
+	const currentPoint = selected.model.position.clone();
+	currentPoint.y += 0.01;
+
+	if (!trailPointsByKey.has(selectedPlaneKey)) {
+		trailPointsByKey.set(selectedPlaneKey, [currentPoint]);
+	}
+
+	drawSelectedTrail(trailPointsByKey.get(selectedPlaneKey));
+}
+
+function sampleSelectedTrail(now) {
+	if (!selectedPlaneKey) return;
+	if (now - lastTrailSampleTime < TRAIL_SAMPLE_INTERVAL_MS) return;
+
+	const selected = planeObjs.find(obj => obj.key === selectedPlaneKey);
+	if (!selected || !selected.model) return;
+
+	const currentPoint = selected.model.position.clone();
+	currentPoint.y += 0.01;
+
+	let points = trailPointsByKey.get(selectedPlaneKey);
+	if (!points) {
+		points = [];
+		trailPointsByKey.set(selectedPlaneKey, points);
+	}
+
+	const lastPoint = points[points.length - 1];
+	if (!lastPoint || lastPoint.distanceTo(currentPoint) >= TRAIL_MIN_DISTANCE) {
+		points.push(currentPoint);
+		if (points.length > TRAIL_MAX_POINTS) {
+			points.splice(0, points.length - TRAIL_MAX_POINTS);
+		}
+		drawSelectedTrail(points);
+	}
+
+	lastTrailSampleTime = now;
+}
+
+function updateGroundMap(latitude, longitude) {
+	const imageUrl = getStaticImageURL({lat: latitude, lng: longitude}, 9.8, {width: 512, height: 512});
+	const Maploader = new THREE.TextureLoader();
+	Maploader.setCrossOrigin('anonymous');
+	Maploader.load(imageUrl, function(texture) {
+		if (groundMesh) {
+			scene.remove(groundMesh);
+			if (groundMesh.geometry) groundMesh.geometry.dispose();
+			if (groundMesh.material) {
+				if (groundMesh.material.map) groundMesh.material.map.dispose();
+				groundMesh.material.dispose();
+			}
+		}
+
+		const groundGeometry = new THREE.PlaneGeometry(2, 2, 32, 32)
+		groundGeometry.rotateX(Math.PI / 2)
+		groundGeometry.rotateY(Math.PI / -2)
+		groundGeometry.rotateZ(Math.PI / -1)
+		const groundMaterial = new THREE.MeshBasicMaterial({map: texture, side: THREE.FrontSide } )
+		groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+		scene.add(groundMesh);
+	});
+}
+
+function applyLocation(latitude, longitude) {
+	lat0 = latitude;
+	long0 = longitude;
+	sendLocationToServer(lat0, long0);
+	updateGroundMap(lat0, long0);
+	fetchPlanes();
+}
+
 function getUserLocation(callback) {
 	if ("geolocation" in navigator) {
 		navigator.geolocation.getCurrentPosition(position => {
@@ -96,6 +272,7 @@ function getUserLocation(callback) {
 			long0 = position.coords.longitude;
 			//console.log(lat0, long0);
 			sendLocationToServer(lat0, long0);
+			updateGroundMap(lat0, long0);
 
 			if (callback) {
 				callback(lat0, long0);
@@ -122,23 +299,29 @@ function getStaticImageURL(centerPoint, zoomLevel, mapSize) {
 }
 
 getUserLocation((lat0, long0) => {
-	const imageUrl = getStaticImageURL({lat: lat0, lng: long0}, 11, {width: 512, height: 512})
-
-	//creating ground flat object - 2 x 2 area
-	const Maploader = new THREE.TextureLoader();
-	Maploader.setCrossOrigin('anonymous');
-	Maploader.load(imageUrl, function(texture) {
-		const groundGeometry = new THREE.PlaneGeometry(2, 2, 32, 32)
-		groundGeometry.rotateX(Math.PI / 2) //rotating plane 90 deg
-		groundGeometry.rotateY(Math.PI / -2)
-		groundGeometry.rotateZ(Math.PI / -1)
-		const groundMaterial = new THREE.MeshBasicMaterial({map: texture, side: THREE.FrontSide } )
-		const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-		//can lower it down - but I chose to raise the cube up by 1
-		scene.add(groundMesh);
-
-	});
+	updateGroundMap(lat0, long0);
 }); //initiate location request
+
+if (applyTestLocationBtn) {
+	applyTestLocationBtn.addEventListener('click', () => {
+		const latitude = Number.parseFloat(testLatEl?.value ?? '');
+		const longitude = Number.parseFloat(testLonEl?.value ?? '');
+		if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+			console.warn('Please enter a valid latitude and longitude.');
+			return;
+		}
+		applyLocation(latitude, longitude);
+	});
+}
+
+if (useCurrentLocationBtn) {
+	useCurrentLocationBtn.addEventListener('click', () => {
+		getUserLocation((latitude, longitude) => {
+			if (testLatEl) testLatEl.value = latitude.toFixed(6);
+			if (testLonEl) testLonEl.value = longitude.toFixed(6);
+		});
+	});
+}
 
 
 
@@ -201,81 +384,117 @@ function convertCoordinates(planeLat, planeLong) {
 //creating models for each plane in range
 var planeObjs = [] //new planes to be added
 var planeData = [];
+// interpolation time (ms) for smoothing movement between API updates
+const INTERPOLATION_TIME = 2000; // 2 seconds by default - tune as desired
+
 function addPlanes(planes, scene) {
 	console.log("addPlanes number of records: " + planes.length)
 
-
-	planeObjs.forEach(function(obj) {
-		scene.remove(obj.model) //remove old plane models before adding new updated locations
-		obj.label.removeFromParent()
-	})
-
-	planeObjs = [];
 	if (!model) {
 		console.error("Model has not loaded yet")
 		return;
 	}
 
-	planes.forEach(function(plane) {
-		let planeP = document.createElement('p');
-		let planeLabel = new CSS2DObject(planeP);
-		planeP.textContent = plane.callsign;
-		planeP.style.color = 'red';
-		
-		const clone = model.clone();
-		clone.add(planeLabel);
-		var altitudeCalc = (Number(plane.altitude) / 45000) * 2;
-
-		var coordinates = convertCoordinates(plane.latitude, plane.longitude)
-		clone.position.set(coordinates.y, altitudeCalc, coordinates.x)
-		//console.log(coordinates)
-		clone.rotation.y = headingToRad(plane.heading)
-		
-		scene.add(clone);
-		// planeObjs.push(clone);
-		planeObjs.push({model: clone, label: planeLabel})
+	// Build a lookup of incoming planes by callsign
+	const incomingCalls = new Set();
+	planeData = planes;
+	planes.forEach(plane => {
+		const planeKey = plane.id || plane.callsign || `${plane.latitude}:${plane.longitude}:${plane.heading || 0}`;
+		if (planeKey) incomingCalls.add(planeKey);
 	});
-	
+
+	// Update existing planes or create new ones
+	planes.forEach(function(plane) {
+		const callsign = plane.callsign || 'Unknown';
+		const planeKey = plane.id || plane.callsign || `${plane.latitude}:${plane.longitude}:${plane.heading || 0}`;
+		if (!planeKey || plane.latitude == null || plane.longitude == null) {
+			return;
+		}
+
+		const latNum = Number(plane.latitude);
+		const longNum = Number(plane.longitude);
+		if (!Number.isFinite(latNum) || !Number.isFinite(longNum)) {
+			return;
+		}
+		const altitudeValue = Number(plane.altitude);
+		const altitudeCalc = Number.isFinite(altitudeValue) ? (altitudeValue / 45000) * 2 : 0;
+		const coords = convertCoordinates(latNum, longNum);
+		const endPos = new THREE.Vector3(coords.y, altitudeCalc, coords.x);
+
+		// create quaternion from heading
+		const endQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, headingToRad(plane.heading), 0));
+
+		// try to find an existing plane object by callsign
+		let existing = planeObjs.find(p => p.key === planeKey);
+
+		if (existing) {
+			// set up interpolation from current state to new target
+			existing.startPos = existing.model.position.clone();
+			existing.endPos = endPos;
+			existing.startQuat = existing.model.quaternion.clone();
+			existing.endQuat = endQuat;
+			existing.startTime = performance.now();
+			existing.duration = INTERPOLATION_TIME;
+			existing.data = plane;
+
+			// update label text (in case callsign or other info changed)
+			if (existing.label && existing.label.element) existing.label.element.textContent = callsign;
+		} else {
+			// create new model and add to scene
+			let planeP = document.createElement('p');
+			let planeLabel = new CSS2DObject(planeP);
+			planeP.textContent = callsign;
+			planeP.style.color = 'red';
+
+			const clone = model.clone();
+			clone.userData.planeKey = planeKey;
+			clone.traverse((node) => {
+				node.userData.planeKey = planeKey;
+			});
+			clone.add(planeLabel);
+			clone.position.copy(endPos);
+			clone.quaternion.copy(endQuat);
+			scene.add(clone);
+
+			planeObjs.push({
+				key: planeKey,
+				callsign: callsign,
+				data: plane,
+				model: clone,
+				label: planeLabel,
+				// set identity so first frame is immediate
+				startPos: clone.position.clone(),
+				endPos: clone.position.clone(),
+				startQuat: clone.quaternion.clone(),
+				endQuat: clone.quaternion.clone(),
+				startTime: performance.now(),
+				duration: 0
+			});
+		}
+	});
+
+	// Remove planes that are no longer reported
+	for (let i = planeObjs.length - 1; i >= 0; i--) {
+		const obj = planeObjs[i];
+		if (obj.key && !incomingCalls.has(obj.key)) {
+			// remove from scene
+			scene.remove(obj.model);
+			if (obj.label) obj.label.removeFromParent();
+			trailPointsByKey.delete(obj.key);
+			if (selectedPlaneKey === obj.key) {
+				selectedPlaneKey = null;
+				setInfoPanel(null);
+				clearSelectedTrailLine();
+			}
+			planeObjs.splice(i, 1);
+		}
+	}
 }
 
 //parsing JSON response into flight details
 function processData(responseList) {
-	const flightData = responseList.map(entry => {
-		const parts = entry.split(' ');
-
-		// Extracting latitude and longitude
-		// const latLongIndex = parts.findIndex(part => part === '(lat/long):') + 1;
-		// const [latitude, longitude] = parts[latLongIndex].split(' ');
-		const latLongRegex = /\(lat\/long\):\s*([-\d.]+)\s+([-\d.]+)/;
-        const latLongMatch = entry.match(latLongRegex);
-
-        let latitude, longitude;
-        if (latLongMatch) {
-            latitude = latLongMatch[1];
-            longitude = latLongMatch[2];
-        }
-
-		// Extracting altitude
-		const altitudeIndex = parts.findIndex(part => part === 'Altitude:') + 1;
-		const altitude = parts[altitudeIndex];
-
-		// Extracting heading
-		const headingIndex = parts.findIndex(part => part === 'Heading:') + 1;
-		const heading = parts[headingIndex];
-
-		// Extracting callsign
-		const callsignIndex = parts.findIndex(part => part === 'Callsign:') + 1;
-		const callsign = parts[callsignIndex];
-
-		// Extracting aircraft type
-		const typeIndex = parts.findIndex(part => part === 'Aircraft Type: ') + 1;
-		const type = parts[typeIndex];
-
-		return { latitude, longitude, altitude, heading, callsign, type };
-	});
-
-	console.log(flightData) //array of objects with lat, long, altitude, heading
-	return flightData
+	if (!Array.isArray(responseList)) return [];
+	return responseList;
 }
 
 //fetch nearby airplanes from Flask Backend
@@ -288,8 +507,15 @@ function fetchPlanes() {
 		return response.json();
 	})
 	.then(data => {
-		planeData = processData(data.response);
-		addPlanes(planeData, scene)
+		const parsed = processData(data.response);
+		addPlanes(parsed, scene)
+
+		if (selectedPlaneKey) {
+			const selected = planeObjs.find(obj => obj.key === selectedPlaneKey);
+			if (selected) {
+				setInfoPanel(selected.data);
+			}
+		}
 	})
 	.catch(error => console.error('Error fetching data from Flask', error));
 }
@@ -304,6 +530,7 @@ window.addEventListener( 'resize', () => {
 	let height = window.innerHeight
 
 	renderer.setSize( width, height )
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
   	//update camera
 	camera.aspect = width / height
@@ -313,10 +540,69 @@ window.addEventListener( 'resize', () => {
 	labelRenderer.setSize(width, height);
 })
 
-const loop = () => {
-  labelRenderer.render(scene, camera)
-  renderer.render(scene, camera)
+window.addEventListener('pointerdown', (event) => {
+	if (!planeObjs.length) return;
 
-  window.requestAnimationFrame(loop)
+	pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+	pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+	raycaster.setFromCamera(pointer, camera);
+	const intersects = raycaster.intersectObjects(planeObjs.map(obj => obj.model), true);
+	if (!intersects.length) return;
+
+	let selectedObject = intersects[0].object;
+	while (selectedObject && !selectedObject.userData.planeKey) {
+		selectedObject = selectedObject.parent;
+	}
+
+	if (!selectedObject || !selectedObject.userData.planeKey) return;
+
+	const clickedPlaneKey = selectedObject.userData.planeKey;
+	if (selectedPlaneKey === clickedPlaneKey) {
+		selectedPlaneKey = null;
+		setInfoPanel(null);
+		clearSelectedTrailLine();
+		return;
+	}
+
+	selectedPlaneKey = clickedPlaneKey;
+	lastTrailSampleTime = 0;
+	const selected = planeObjs.find(obj => obj.key === selectedPlaneKey);
+	if (selected) {
+		setInfoPanel(selected.data);
+		seedAndRenderSelectedTrail();
+	}
+});
+
+const loop = () => {
+	// interpolate plane positions and rotations
+	const now = performance.now();
+	planeObjs.forEach(obj => {
+		if (!obj.model) return;
+
+		const t0 = obj.startTime || now;
+		const dur = obj.duration || 0;
+		let alpha = dur > 0 ? Math.min((now - t0) / dur, 1) : 1;
+
+		// optional easing (smoothstep)
+		alpha = alpha * alpha * (3 - 2 * alpha);
+
+		// position lerp
+		if (obj.startPos && obj.endPos) {
+			obj.model.position.lerpVectors(obj.startPos, obj.endPos, alpha);
+		}
+
+		// rotation slerp
+		if (obj.startQuat && obj.endQuat) {
+			obj.model.quaternion.copy(obj.startQuat).slerp(obj.endQuat, alpha);
+		}
+	});
+
+	sampleSelectedTrail(now);
+
+	labelRenderer.render(scene, camera)
+	renderer.render(scene, camera)
+
+	window.requestAnimationFrame(loop)
 }
 loop()
